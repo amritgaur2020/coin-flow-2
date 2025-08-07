@@ -5,7 +5,7 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 // In-memory cache to reduce API calls
 let priceCache: any = null
 let cacheTimestamp: number = 0
-const CACHE_DURATION = 3600000 // 1 hour cache (3,600,000 milliseconds)
+const CACHE_DURATION = 300000 // 5 minutes cache (300,000 milliseconds) - more frequent updates
 
 // Fallback data that looks realistic
 const FALLBACK_DATA = {
@@ -21,27 +21,29 @@ const FALLBACK_DATA = {
   DOT: { price: 7.2, change24h: -1.8, marketCap: 9200000000, volume: 380000000 }
 }
 
-// Simulate extremely slow, minimal price movements like real crypto websites
-function simulatePriceMovement(baseData: any) {
+// Simulate more realistic price movements like Binance
+function simulateBinanceLikePriceMovement(baseData: any) {
   const simulatedData: any = {}
   
   Object.entries(baseData).forEach(([symbol, data]: [string, any]) => {
-    // Extremely tiny random variations to simulate very slow market movement
-    // Most of the time prices stay exactly the same
-    const shouldChange = Math.random() < 0.1 // Only 10% chance of any change
+    // More realistic price variations (like Binance shows)
+    const shouldChange = Math.random() < 0.3 // 30% chance of change (more frequent)
     
     if (shouldChange) {
-      const priceVariation = (Math.random() - 0.5) * 0.0005 // ±0.025% variation (extremely tiny)
-      const changeVariation = (Math.random() - 0.5) * 0.05 // ±0.025% change in 24h change (extremely tiny)
+      // Binance-like price movements (small but noticeable)
+      const priceVariation = (Math.random() - 0.5) * 0.002 // ±0.1% variation
+      const changeVariation = (Math.random() - 0.5) * 0.2 // ±0.1% change in 24h change
       
       simulatedData[symbol] = {
         price: data.price * (1 + priceVariation),
         change24h: data.change24h + changeVariation,
-        marketCap: data.marketCap * (1 + priceVariation * 0.1),
-        volume: data.volume * (1 + (Math.random() - 0.5) * 0.01) // Extremely small volume changes
+        marketCap: data.marketCap * (1 + priceVariation * 0.5),
+        volume: data.volume * (1 + (Math.random() - 0.5) * 0.05) // Small volume changes
       }
+      
+      console.log(`📈 ${symbol} price changed: ${data.price} → ${simulatedData[symbol].price}`)
     } else {
-      // Most of the time, return exactly the same values
+      // Keep the same values most of the time
       simulatedData[symbol] = {
         price: data.price,
         change24h: data.change24h,
@@ -56,16 +58,18 @@ function simulatePriceMovement(baseData: any) {
 
 export async function GET() {
   try {
+    console.log('🔄 Fetching crypto prices...')
+    
     // Check cache first
     const now = Date.now()
     if (priceCache && (now - cacheTimestamp) < CACHE_DURATION) {
-      console.log('Returning cached data with extremely minimal variation')
-      return NextResponse.json(simulatePriceMovement(priceCache))
+      console.log('📦 Returning cached data with price simulation')
+      return NextResponse.json(simulateBinanceLikePriceMovement(priceCache))
     }
 
-    // Try to fetch from CoinGecko with longer timeout and retry logic
+    // Try to fetch from CoinGecko
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
 
     try {
       const response = await fetch(
@@ -82,7 +86,7 @@ export async function GET() {
       clearTimeout(timeoutId)
 
       if (response.status === 429) {
-        console.warn('Rate limited by CoinGecko API, using cached/fallback data')
+        console.warn('⚠️ Rate limited by CoinGecko API, using cached/fallback data')
         throw new Error('Rate limited')
       }
 
@@ -91,6 +95,7 @@ export async function GET() {
       }
 
       const data = await response.json()
+      console.log('✅ Successfully fetched from CoinGecko API')
       
       // Helper function to safely extract price data
       const extractPriceData = (coinData: any) => {
@@ -133,7 +138,7 @@ export async function GET() {
       if (Object.keys(transformedData).length > 0) {
         priceCache = transformedData
         cacheTimestamp = now
-        console.log('Successfully fetched and cached new data for 1 hour')
+        console.log('💾 Successfully cached new data for 5 minutes')
         return NextResponse.json(transformedData)
       } else {
         throw new Error('No valid data received')
@@ -145,7 +150,7 @@ export async function GET() {
     }
 
   } catch (error) {
-    console.warn('API fetch failed, using fallback data:', error)
+    console.warn('⚠️ API fetch failed, using fallback data:', error)
     
     // Use cached data if available, otherwise use fallback
     const dataToUse = priceCache || FALLBACK_DATA
@@ -156,7 +161,7 @@ export async function GET() {
       cacheTimestamp = Date.now()
     }
     
-    // Return simulated data with extremely small variations
-    return NextResponse.json(simulatePriceMovement(dataToUse))
+    // Return simulated data with Binance-like variations
+    return NextResponse.json(simulateBinanceLikePriceMovement(dataToUse))
   }
 }

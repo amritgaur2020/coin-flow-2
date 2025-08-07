@@ -36,37 +36,45 @@ export function useCryptoPrices() {
       
       // Validate that we received valid data
       if (data && typeof data === 'object' && Object.keys(data).length > 0) {
-        // Round prices to avoid showing too many decimal places that change rapidly
-        const roundedData: CryptoPrices = {}
+        // Apply realistic price formatting like Binance
+        const formattedData: CryptoPrices = {}
         Object.entries(data).forEach(([symbol, priceData]: [string, any]) => {
-          roundedData[symbol] = {
-            price: Math.round(priceData.price * 100) / 100, // Round to 2 decimal places for most coins
-            change24h: Math.round(priceData.change24h * 100) / 100, // Round to 2 decimal places
+          // Format prices like Binance (different precision for different price ranges)
+          let formattedPrice = priceData.price
+          if (priceData.price >= 1000) {
+            formattedPrice = Math.round(priceData.price * 100) / 100 // 2 decimals for high prices
+          } else if (priceData.price >= 1) {
+            formattedPrice = Math.round(priceData.price * 1000) / 1000 // 3 decimals for medium prices
+          } else if (priceData.price >= 0.01) {
+            formattedPrice = Math.round(priceData.price * 10000) / 10000 // 4 decimals for small prices
+          } else {
+            formattedPrice = Math.round(priceData.price * 100000) / 100000 // 5 decimals for very small prices
+          }
+          
+          formattedData[symbol] = {
+            price: formattedPrice,
+            change24h: Math.round(priceData.change24h * 100) / 100, // 2 decimal places for percentage
             marketCap: Math.round(priceData.marketCap),
             volume: Math.round(priceData.volume)
           }
-          
-          // Special handling for very small price coins (like DOGE)
-          if (priceData.price < 1) {
-            roundedData[symbol].price = Math.round(priceData.price * 10000) / 10000 // 4 decimal places for small coins
-          }
         })
         
-        setPrices(roundedData)
+        setPrices(formattedData)
         setLastUpdated(new Date())
         setLoading(false)
         setIsUsingFallback(false)
+        console.log('✅ Successfully updated crypto prices:', formattedData)
       } else {
         throw new Error('Invalid data format received')
       }
     } catch (err) {
-      console.warn('Error in useCryptoPrices:', err)
+      console.warn('⚠️ Error in useCryptoPrices:', err)
       setError(err instanceof Error ? err.message : 'Unknown error')
       setIsUsingFallback(true)
       
       // Set fallback data if no data exists yet
       if (Object.keys(prices).length === 0) {
-        setPrices({
+        const fallbackPrices = {
           BTC: { price: 43250.00, change24h: 2.50, marketCap: 850000000000, volume: 25000000000 },
           ETH: { price: 2580.00, change24h: -1.20, marketCap: 310000000000, volume: 15000000000 },
           ADA: { price: 0.5200, change24h: 4.10, marketCap: 18000000000, volume: 800000000 },
@@ -77,8 +85,10 @@ export function useCryptoPrices() {
           DOGE: { price: 0.0820, change24h: 3.20, marketCap: 12000000000, volume: 650000000 },
           LINK: { price: 14.50, change24h: 2.10, marketCap: 8500000000, volume: 420000000 },
           DOT: { price: 7.20, change24h: -1.80, marketCap: 9200000000, volume: 380000000 }
-        })
+        }
+        setPrices(fallbackPrices)
         setLastUpdated(new Date())
+        console.log('🔄 Using fallback prices due to API error')
       }
       setLoading(false)
     }
@@ -87,8 +97,8 @@ export function useCryptoPrices() {
   useEffect(() => {
     fetchPrices()
     
-    // 1 hour interval (3,600,000 milliseconds) for extremely slow updates
-    const interval = setInterval(fetchPrices, 3600000)
+    // More frequent updates for better price tracking (5 minutes instead of 1 hour)
+    const interval = setInterval(fetchPrices, 300000) // 5 minutes
     
     return () => clearInterval(interval)
   }, [fetchPrices])

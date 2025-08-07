@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,20 +12,15 @@ import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Wallet, TrendingUp, Send, Plus, ArrowUpRight, ArrowDownLeft, Bitcoin, Coins, RefreshCw, AlertCircle, Clock, Wifi, WifiOff } from 'lucide-react'
+import { Wallet, TrendingUp, Send, Plus, ArrowUpRight, ArrowDownLeft, Bitcoin, Coins, RefreshCw, AlertCircle, Clock, Wifi, WifiOff, Activity, BarChart3 } from 'lucide-react'
 import { toast } from "@/hooks/use-toast"
-import { useCryptoPrices } from "@/hooks/useCryptoPrices"
-import { PriceChart } from "@/components/PriceChart"
+import { useWebSocketPrices } from "@/hooks/useWebSocketPrices"
+import { usePersistentHoldings } from "@/hooks/usePersistentHoldings"
+import { PriceHistoryChart } from "@/components/PriceHistoryChart"
+import { MarketAnalysis } from "@/components/MarketAnalysis"
 import { TrendingSection } from "@/components/TrendingSection"
 import { AnimatedNumber } from "@/components/AnimatedNumber"
 import { AnimatedCard } from "@/components/AnimatedCard"
-
-interface CryptoHolding {
-  symbol: string
-  name: string
-  amount: number
-  averagePrice: number
-}
 
 interface Transaction {
   id: string
@@ -52,13 +47,10 @@ const CRYPTO_INFO = {
 }
 
 export default function CryptoWalletApp() {
-  const { prices, loading: pricesLoading, error: pricesError, lastUpdated, isUsingFallback, refetch } = useCryptoPrices()
+  const { prices, loading: pricesLoading, error: pricesError, lastUpdated, isUsingFallback, connectionStatus, refetch, reconnect } = useWebSocketPrices()
+  const { holdings, updateHoldings, isLoaded: holdingsLoaded } = usePersistentHoldings()
+  
   const [fiatBalance, setFiatBalance] = useState(2500.00)
-  const [holdings, setHoldings] = useState<CryptoHolding[]>([
-    { symbol: 'BTC', name: 'Bitcoin', amount: 0.025, averagePrice: 42000 },
-    { symbol: 'ETH', name: 'Ethereum', amount: 1.5, averagePrice: 2500 },
-    { symbol: 'ADA', name: 'Cardano', amount: 1000, averagePrice: 0.48 }
-  ])
   const [transactions, setTransactions] = useState<Transaction[]>([
     { id: '1', type: 'deposit', amount: 1000, currency: 'USD', timestamp: new Date(Date.now() - 86400000), status: 'completed' },
     { id: '2', type: 'buy', amount: 0.025, currency: 'BTC', timestamp: new Date(Date.now() - 43200000), status: 'completed', price: 42000 },
@@ -78,52 +70,73 @@ export default function CryptoWalletApp() {
   const [portfolioChanged, setPortfolioChanged] = useState(false)
   const [totalBalanceChanged, setTotalBalanceChanged] = useState(false)
 
-  // Calculate portfolio value using real-time prices
-  const totalPortfolioValue = holdings.reduce((sum, holding) => {
-    const currentPrice = prices[holding.symbol]?.price || 0
-    return sum + (holding.amount * currentPrice)
-  }, 0)
+  // Calculate portfolio value using real-time prices (memoized for performance)
+  const totalPortfolioValue = useMemo(() => {
+    const value = holdings.reduce((sum, holding) => {
+      const currentPrice = prices[holding.symbol]?.price || holding.averagePrice // Fallback to average price if no current price
+      return sum + (holding.amount * currentPrice)
+    }, 0)
+    
+    // Log portfolio value changes for debugging
+    if (value !== previousPortfolioValue && previousPortfolioValue !== 0) {
+      const change = value - previousPortfolioValue
+      const changePercent = ((change / previousPortfolioValue) * 100).toFixed(2)
+      console.log(`💰 Portfolio value changed: $${previousPortfolioValue.toFixed(2)} → $${value.toFixed(2)} (${change >= 0 ? '+' : ''}${changePercent}%)`)
+    }
+    
+    return value
+  }, [holdings, prices, previousPortfolioValue])
 
-  // Calculate total P&L
-  const totalPnL = holdings.reduce((sum, holding) => {
-    const currentPrice = prices[holding.symbol]?.price || 0
-    const currentValue = holding.amount * currentPrice
-    const costBasis = holding.amount * holding.averagePrice
-    return sum + (currentValue - costBasis)
-  }, 0)
+  // Calculate total P&L with real-time updates
+  const totalPnL = useMemo(() => {
+    return holdings.reduce((sum, holding) => {
+      const currentPrice = prices[holding.symbol]?.price || holding.averagePrice
+      const currentValue = holding.amount * currentPrice
+      const costBasis = holding.amount * holding.averagePrice
+      return sum + (currentValue - costBasis)
+    }, 0)
+  }, [holdings, prices])
 
   const totalBalance = fiatBalance + totalPortfolioValue
 
-  // Detect changes for animations
+  // Detect changes for animations with better sensitivity
   useEffect(() => {
-    const roundedPortfolio = Math.round(totalPortfolioValue)
-    const roundedPrevious = Math.round(previousPortfolioValue)
+    const roundedPortfolio = Math.round(totalPortfolioValue * 100) / 100
+    const roundedPrevious = Math.round(previousPortfolioValue * 100) / 100
     
-    if (Math.abs(roundedPortfolio - roundedPrevious) > 1 && previousPortfolioValue !== 0) {
+    if (Math.abs(roundedPortfolio - roundedPrevious) > 0.01 && previousPortfolioValue !== 0) {
       setPortfolioChanged(true)
+      console.log('🎯 Portfolio animation triggered!')
       setTimeout(() => setPortfolioChanged(false), 3000)
     }
     
-    // Only update previous value if it's significantly different
-    if (Math.abs(roundedPortfolio - roundedPrevious) > 1) {
+    if (Math.abs(roundedPortfolio - roundedPrevious) > 0.01) {
       setPreviousPortfolioValue(roundedPortfolio)
     }
-  }, [totalPortfolioValue]) // Remove previousPortfolioValue from dependencies
+  }, [totalPortfolioValue])
 
   useEffect(() => {
-    const roundedTotal = Math.round(totalBalance)
-    const roundedPrevious = Math.round(previousTotalBalance)
+    const roundedTotal = Math.round(totalBalance * 100) / 100
+    const roundedPrevious = Math.round(previousTotalBalance * 100) / 100
     
-    if (Math.abs(roundedTotal - roundedPrevious) > 1 && previousTotalBalance !== 0) {
+    if (Math.abs(roundedTotal - roundedPrevious) > 0.01 && previousTotalBalance !== 0) {
       setTotalBalanceChanged(true)
+      console.log('🎯 Total balance animation triggered!')
       setTimeout(() => setTotalBalanceChanged(false), 3000)
     }
     
-    // Only update previous value if it's significantly different
-    if (Math.abs(roundedTotal - roundedPrevious) > 1) {
+    if (Math.abs(roundedTotal - roundedPrevious) > 0.01) {
       setPreviousTotalBalance(roundedTotal)
     }
-  }, [totalBalance]) // Remove previousTotalBalance from dependencies
+  }, [totalBalance])
+
+  // Log price updates for debugging
+  useEffect(() => {
+    if (Object.keys(prices).length > 0) {
+      console.log('📊 Current crypto prices:', prices)
+      console.log('💼 Current portfolio value:', totalPortfolioValue)
+    }
+  }, [prices, totalPortfolioValue])
 
   const handleDeposit = () => {
     const amount = parseFloat(depositAmount)
@@ -160,19 +173,20 @@ export default function CryptoWalletApp() {
         const newTotalAmount = existingHolding.amount + cryptoAmount
         const newAveragePrice = ((existingHolding.amount * existingHolding.averagePrice) + amount) / newTotalAmount
         
-        setHoldings(prev => prev.map(h => 
+        const updatedHoldings = holdings.map(h => 
           h.symbol === selectedCrypto 
             ? { ...h, amount: newTotalAmount, averagePrice: newAveragePrice }
             : h
-        ))
+        )
+        updateHoldings(updatedHoldings)
       } else {
-        const newHolding: CryptoHolding = {
+        const newHolding = {
           symbol: selectedCrypto,
           name: CRYPTO_INFO[selectedCrypto as keyof typeof CRYPTO_INFO].name,
           amount: cryptoAmount,
           averagePrice: currentPrice
         }
-        setHoldings(prev => [...prev, newHolding])
+        updateHoldings([...holdings, newHolding])
       }
 
       const newTransaction: Transaction = {
@@ -200,11 +214,13 @@ export default function CryptoWalletApp() {
     const currentPrice = prices[sendCrypto]?.price
     
     if (amount > 0 && holding && amount <= holding.amount && recipientAddress && currentPrice) {
-      setHoldings(prev => prev.map(h => 
+      const updatedHoldings = holdings.map(h => 
         h.symbol === sendCrypto 
           ? { ...h, amount: h.amount - amount }
           : h
-      ).filter(h => h.amount > 0.000001))
+      ).filter(h => h.amount > 0.000001)
+      
+      updateHoldings(updatedHoldings)
 
       const newTransaction: Transaction = {
         id: Date.now().toString(),
@@ -227,7 +243,25 @@ export default function CryptoWalletApp() {
     }
   }
 
-  if (pricesLoading) {
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-green-400'
+      case 'connecting': return 'text-yellow-400'
+      case 'disconnected': return 'text-red-400'
+      default: return 'text-slate-400'
+    }
+  }
+
+  const getConnectionStatusIcon = () => {
+    switch (connectionStatus) {
+      case 'connected': return <Wifi className="w-4 h-4 text-green-400" />
+      case 'connecting': return <RefreshCw className="w-4 h-4 text-yellow-400 animate-spin" />
+      case 'disconnected': return <WifiOff className="w-4 h-4 text-red-400" />
+      default: return <WifiOff className="w-4 h-4 text-slate-400" />
+    }
+  }
+
+  if (pricesLoading || !holdingsLoaded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -260,16 +294,19 @@ export default function CryptoWalletApp() {
           className="text-center py-8"
         >
           <h1 className="text-4xl font-bold text-white mb-2">CryptoWallet Pro</h1>
-          <p className="text-slate-300">Real-time cryptocurrency trading platform</p>
+          <p className="text-slate-300">Real-time cryptocurrency trading platform with WebSocket</p>
           {lastUpdated && (
             <div className="flex items-center justify-center gap-2 mt-2 text-sm text-slate-400">
-              {isUsingFallback ? <WifiOff className="w-4 h-4 text-orange-400" /> : <Wifi className="w-4 h-4 text-green-400" />}
+              {getConnectionStatusIcon()}
               <Clock className="w-4 h-4" />
-              Last updated: {lastUpdated.toLocaleTimeString()}
+              <span className={getConnectionStatusColor()}>
+                {connectionStatus === 'connected' ? 'Live' : connectionStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+              </span>
+              • Last updated: {lastUpdated.toLocaleTimeString()}
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={refetch}
+                onClick={connectionStatus === 'disconnected' ? reconnect : refetch}
                 className="h-6 px-2 text-slate-400 hover:text-white"
               >
                 <motion.div
@@ -283,7 +320,7 @@ export default function CryptoWalletApp() {
           )}
         </motion.div>
 
-        {isUsingFallback && (
+        {(isUsingFallback || connectionStatus === 'disconnected') && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -292,7 +329,10 @@ export default function CryptoWalletApp() {
             <Alert className="bg-orange-900/20 border-orange-700">
               <WifiOff className="h-4 w-4" />
               <AlertDescription className="text-orange-200">
-                Using simulated data due to API rate limits. Prices are updated with realistic variations.
+                {connectionStatus === 'disconnected' 
+                  ? 'WebSocket disconnected. Using cached data with simulated updates.'
+                  : 'Using simulated WebSocket data. Prices update every 2-5 seconds with realistic variations.'
+                }
               </AlertDescription>
             </Alert>
           </motion.div>
@@ -313,7 +353,7 @@ export default function CryptoWalletApp() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  <AnimatedNumber value={fiatBalance} prefix="$" decimals={0} />
+                  <AnimatedNumber value={fiatBalance} prefix="$" decimals={2} />
                 </div>
                 <p className="text-xs text-slate-400">Available for trading</p>
               </CardContent>
@@ -339,15 +379,15 @@ export default function CryptoWalletApp() {
                   <AnimatedNumber 
                     value={totalPortfolioValue} 
                     prefix="$" 
-                    decimals={0} 
+                    decimals={2} 
                     showChange={true}
                   />
                 </div>
                 <p className={`text-xs ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   <AnimatedNumber 
-                    value={totalPnL} 
+                    value={Math.abs(totalPnL)} 
                     prefix={totalPnL >= 0 ? '+$' : '-$'} 
-                    decimals={0}
+                    decimals={2}
                   /> P&L
                 </p>
               </CardContent>
@@ -373,7 +413,7 @@ export default function CryptoWalletApp() {
                   <AnimatedNumber 
                     value={totalBalance} 
                     prefix="$" 
-                    decimals={0} 
+                    decimals={2} 
                     showChange={true}
                   />
                 </div>
@@ -385,12 +425,18 @@ export default function CryptoWalletApp() {
           <AnimatedCard>
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-200">Data Status</CardTitle>
-                {isUsingFallback ? <WifiOff className="h-4 w-4 text-orange-400" /> : <Wifi className="h-4 w-4 text-green-400" />}
+                <CardTitle className="text-sm font-medium text-slate-200">Connection</CardTitle>
+                {getConnectionStatusIcon()}
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-white">{isUsingFallback ? 'Simulated' : 'Live'}</div>
-                <p className="text-xs text-slate-400">{isUsingFallback ? 'Rate limited' : 'Real-time data'}</p>
+                <div className={`text-2xl font-bold ${getConnectionStatusColor()}`}>
+                  {connectionStatus === 'connected' ? 'Live' : 
+                   connectionStatus === 'connecting' ? 'Sync...' : 'Offline'}
+                </div>
+                <p className="text-xs text-slate-400">
+                  {connectionStatus === 'connected' ? 'Real-time updates' : 
+                   connectionStatus === 'connecting' ? 'Establishing connection' : 'Cached data'}
+                </p>
               </CardContent>
             </Card>
           </AnimatedCard>
@@ -400,9 +446,10 @@ export default function CryptoWalletApp() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3">
             <Tabs defaultValue="portfolio" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 bg-slate-800/50">
+              <TabsList className="grid w-full grid-cols-5 bg-slate-800/50">
                 <TabsTrigger value="portfolio" className="data-[state=active]:bg-purple-600">Portfolio</TabsTrigger>
                 <TabsTrigger value="markets" className="data-[state=active]:bg-purple-600">Markets</TabsTrigger>
+                <TabsTrigger value="analysis" className="data-[state=active]:bg-purple-600">Analysis</TabsTrigger>
                 <TabsTrigger value="trade" className="data-[state=active]:bg-purple-600">Trade</TabsTrigger>
                 <TabsTrigger value="send" className="data-[state=active]:bg-purple-600">Send</TabsTrigger>
               </TabsList>
@@ -412,13 +459,13 @@ export default function CryptoWalletApp() {
                   <CardHeader>
                     <CardTitle className="text-white">Your Holdings</CardTitle>
                     <CardDescription className="text-slate-400">
-                      {isUsingFallback ? 'Portfolio with simulated prices' : 'Real-time portfolio with live prices'}
+                      {connectionStatus === 'connected' ? 'Real-time portfolio with WebSocket updates' : 'Portfolio with cached prices (persisted on refresh)'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <AnimatePresence>
                       {holdings.map((holding, index) => {
-                        const currentPrice = prices[holding.symbol]?.price || 0
+                        const currentPrice = prices[holding.symbol]?.price || holding.averagePrice
                         const currentValue = holding.amount * currentPrice
                         const costBasis = holding.amount * holding.averagePrice
                         const pnl = currentValue - costBasis
@@ -455,14 +502,14 @@ export default function CryptoWalletApp() {
                                 {holding.amount.toFixed(6)} {holding.symbol}
                               </div>
                               <div className="text-sm text-slate-400">
-                                <AnimatedNumber value={currentValue} prefix="$" decimals={0} />
+                                <AnimatedNumber value={currentValue} prefix="$" decimals={2} />
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant={pnl >= 0 ? "default" : "destructive"} className="text-xs">
                                   <AnimatedNumber 
-                                    value={pnl} 
+                                    value={Math.abs(pnl)} 
                                     prefix={pnl >= 0 ? '+$' : '-$'} 
-                                    decimals={0}
+                                    decimals={2}
                                   /> ({pnlPercentage.toFixed(1)}%)
                                 </Badge>
                                 <Badge variant={priceChange >= 0 ? "default" : "destructive"} className="text-xs">
@@ -470,7 +517,7 @@ export default function CryptoWalletApp() {
                                     value={priceChange} 
                                     prefix={priceChange >= 0 ? '+' : ''} 
                                     suffix="%" 
-                                    decimals={1}
+                                    decimals={2}
                                   />
                                 </Badge>
                               </div>
@@ -562,16 +609,29 @@ export default function CryptoWalletApp() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5, delay: index * 0.1 }}
                     >
-                      <PriceChart
+                      <PriceHistoryChart
                         symbol={symbol}
                         name={CRYPTO_INFO[symbol as keyof typeof CRYPTO_INFO]?.name || symbol}
                         price={data.price}
                         change24h={data.change24h}
                         volume={data.volume}
                         marketCap={data.marketCap}
+                        high24h={data.high24h}
+                        low24h={data.low24h}
+                        priceHistory={data.priceHistory}
                       />
                     </motion.div>
                   ))}
+                </motion.div>
+              </TabsContent>
+
+              <TabsContent value="analysis" className="space-y-6">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.8 }}
+                >
+                  <MarketAnalysis prices={prices} />
                 </motion.div>
               </TabsContent>
 
@@ -607,7 +667,7 @@ export default function CryptoWalletApp() {
                     <CardHeader>
                       <CardTitle className="text-white">Buy Cryptocurrency</CardTitle>
                       <CardDescription className="text-slate-400">
-                        Purchase crypto with {isUsingFallback ? 'simulated' : 'live'} prices
+                        Purchase crypto with {connectionStatus === 'connected' ? 'live' : 'cached'} prices
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -737,22 +797,30 @@ export default function CryptoWalletApp() {
             
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader>
-                <CardTitle className="text-white text-sm">Market Status</CardTitle>
+                <CardTitle className="text-white text-sm">Connection Status</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-400 text-sm">Status</span>
-                  <Badge className={isUsingFallback ? "bg-orange-600" : "bg-green-600"}>
-                    {isUsingFallback ? 'Simulated' : 'Live'}
+                  <span className="text-slate-400 text-sm">WebSocket</span>
+                  <Badge className={
+                    connectionStatus === 'connected' ? "bg-green-600" : 
+                    connectionStatus === 'connecting' ? "bg-yellow-600" : "bg-red-600"
+                  }>
+                    {connectionStatus === 'connected' ? 'Live' : 
+                     connectionStatus === 'connecting' ? 'Connecting' : 'Offline'}
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Update Frequency</span>
-                  <span className="text-white text-sm">1hr</span>
+                  <span className="text-white text-sm">2-5s</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400 text-sm">Data Source</span>
                   <span className="text-white text-sm">{isUsingFallback ? 'Simulated' : 'CoinGecko'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-sm">Holdings</span>
+                  <span className="text-white text-sm">Persistent</span>
                 </div>
               </CardContent>
             </Card>
