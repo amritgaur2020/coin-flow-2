@@ -10,7 +10,16 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    serverComponentsExternalPackages: ['razorpay', 'stripe']
+    serverComponentsExternalPackages: []
+  },
+  webpack: (config) => {
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      crypto: false,
+      stream: false,
+      buffer: false,
+    }
+    return config
   }
 }
 
