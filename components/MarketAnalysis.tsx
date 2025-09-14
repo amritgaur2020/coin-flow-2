@@ -232,7 +232,7 @@ export function MarketAnalysis({ prices }: MarketAnalysisProps) {
                   />
                 </div>
                 <div className="text-sm text-slate-400">
-                  ${marketData.topGainer.price.toFixed(4)}
+                  $<AnimatedNumber value={marketData.topGainer.price} decimals={4} />
                 </div>
               </div>
             </motion.div>
@@ -257,7 +257,7 @@ export function MarketAnalysis({ prices }: MarketAnalysisProps) {
                   />
                 </div>
                 <div className="text-sm text-slate-400">
-                  ${marketData.topLoser.price.toFixed(4)}
+                  $<AnimatedNumber value={marketData.topLoser.price} decimals={4} />
                 </div>
               </div>
             </motion.div>

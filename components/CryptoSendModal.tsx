@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { X, Send, ExternalLink, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { X, Send, ExternalLink, AlertTriangle, CheckCircle, Clock, Network } from 'lucide-react'
 import { toast } from "@/hooks/use-toast"
 
 interface CryptoSendModalProps {
@@ -21,8 +21,59 @@ interface CryptoSendModalProps {
   onSuccess: (symbol: string, amount: number) => void
 }
 
+// Network configurations for different cryptocurrencies
+const NETWORK_CONFIG = {
+  BTC: [
+    { id: 'bitcoin', name: 'Bitcoin Network', fee: 0.0001, confirmTime: '10-60 minutes' },
+    { id: 'lightning', name: 'Lightning Network', fee: 0.000001, confirmTime: '< 1 second' }
+  ],
+  ETH: [
+    { id: 'ethereum', name: 'Ethereum Mainnet', fee: 0.002, confirmTime: '1-5 minutes' },
+    { id: 'polygon', name: 'Polygon Network', fee: 0.0001, confirmTime: '2-3 seconds' },
+    { id: 'arbitrum', name: 'Arbitrum One', fee: 0.0005, confirmTime: '10-15 minutes' },
+    { id: 'optimism', name: 'Optimism', fee: 0.0003, confirmTime: '10-15 minutes' }
+  ],
+  ADA: [
+    { id: 'cardano', name: 'Cardano Network', fee: 0.17, confirmTime: '2-5 minutes' }
+  ],
+  SOL: [
+    { id: 'solana', name: 'Solana Network', fee: 0.00025, confirmTime: '30 seconds' }
+  ],
+  MATIC: [
+    { id: 'polygon', name: 'Polygon Network', fee: 0.001, confirmTime: '2-3 seconds' },
+    { id: 'ethereum', name: 'Ethereum (ERC-20)', fee: 0.002, confirmTime: '1-5 minutes' }
+  ],
+  BNB: [
+    { id: 'bsc', name: 'BNB Smart Chain', fee: 0.0005, confirmTime: '3 seconds' },
+    { id: 'ethereum', name: 'Ethereum (ERC-20)', fee: 0.002, confirmTime: '1-5 minutes' }
+  ],
+  XRP: [
+    { id: 'xrp', name: 'XRP Ledger', fee: 0.00001, confirmTime: '3-5 seconds' }
+  ],
+  DOGE: [
+    { id: 'dogecoin', name: 'Dogecoin Network', fee: 1, confirmTime: '1 minute' }
+  ],
+  LINK: [
+    { id: 'ethereum', name: 'Ethereum (ERC-20)', fee: 0.002, confirmTime: '1-5 minutes' },
+    { id: 'polygon', name: 'Polygon Network', fee: 0.0001, confirmTime: '2-3 seconds' }
+  ],
+  DOT: [
+    { id: 'polkadot', name: 'Polkadot Network', fee: 0.01, confirmTime: '6 seconds' }
+  ],
+  USDT: [
+    { id: 'ethereum', name: 'Ethereum (ERC-20)', fee: 0.002, confirmTime: '1-5 minutes' },
+    { id: 'tron', name: 'Tron Network (TRC-20)', fee: 1, confirmTime: '3 minutes' },
+    { id: 'polygon', name: 'Polygon Network', fee: 0.0001, confirmTime: '2-3 seconds' },
+    { id: 'bsc', name: 'BNB Smart Chain (BEP-20)', fee: 0.0005, confirmTime: '3 seconds' },
+    { id: 'arbitrum', name: 'Arbitrum One', fee: 0.0005, confirmTime: '10-15 minutes' },
+    { id: 'optimism', name: 'Optimism', fee: 0.0003, confirmTime: '10-15 minutes' },
+    { id: 'avalanche', name: 'Avalanche C-Chain', fee: 0.01, confirmTime: '2 seconds' }
+  ]
+}
+
 export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }: CryptoSendModalProps) {
   const [selectedCrypto, setSelectedCrypto] = useState('')
+  const [selectedNetwork, setSelectedNetwork] = useState('')
   const [amount, setAmount] = useState('')
   const [toAddress, setToAddress] = useState('')
   const [sending, setSending] = useState(false)
@@ -32,17 +83,33 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
   const selectedHolding = holdings.find(h => h.symbol === selectedCrypto)
   const currentPrice = prices[selectedCrypto]?.price || 0
   const usdValue = parseFloat(amount) * currentPrice
-  const networkFee = getNetworkFee(selectedCrypto)
+  const availableNetworks = selectedCrypto ? NETWORK_CONFIG[selectedCrypto as keyof typeof NETWORK_CONFIG] || [] : []
+  const selectedNetworkConfig = availableNetworks.find(n => n.id === selectedNetwork)
+  const networkFee = selectedNetworkConfig?.fee || 0
   const totalAmount = parseFloat(amount) + networkFee
 
+  const handleCryptoChange = (crypto: string) => {
+    setSelectedCrypto(crypto)
+    setSelectedNetwork('') // Reset network when crypto changes
+    const networks = NETWORK_CONFIG[crypto as keyof typeof NETWORK_CONFIG] || []
+    if (networks.length > 0) {
+      setSelectedNetwork(networks[0].id) // Auto-select first network
+    }
+  }
+
   const handleSend = async () => {
-    if (!selectedCrypto || !amount || !toAddress) {
+    if (!selectedCrypto || !amount || !toAddress || !selectedNetwork) {
       setError('Please fill in all fields')
       return
     }
 
     if (!selectedHolding || parseFloat(amount) > selectedHolding.amount) {
       setError('Insufficient balance')
+      return
+    }
+
+    if (!selectedNetworkConfig) {
+      setError('Please select a valid network')
       return
     }
 
@@ -57,7 +124,9 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
           symbol: selectedCrypto,
           amount: parseFloat(amount),
           toAddress: toAddress,
-          userId: 'user_123' // Replace with actual user ID
+          network: selectedNetwork,
+          networkName: selectedNetworkConfig.name,
+          userId: 'user_123'
         })
       })
 
@@ -68,7 +137,7 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
         onSuccess(selectedCrypto, parseFloat(amount))
         toast({
           title: "Transaction Submitted!",
-          description: `${amount} ${selectedCrypto} sent to blockchain network`,
+          description: `${amount} ${selectedCrypto} sent via ${selectedNetworkConfig.name}`,
         })
       } else {
         setError(result.error || 'Transaction failed')
@@ -82,6 +151,7 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
 
   const resetForm = () => {
     setSelectedCrypto('')
+    setSelectedNetwork('')
     setAmount('')
     setToAddress('')
     setError(null)
@@ -93,21 +163,66 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
     onClose()
   }
 
-  function getNetworkFee(symbol: string): number {
-    const fees: { [key: string]: number } = {
-      'BTC': 0.0001,
-      'ETH': 0.002,
-      'ADA': 0.17,
-      'SOL': 0.00025,
-      'MATIC': 0.001,
-      'BNB': 0.0005,
-      'XRP': 0.00001,
-      'DOGE': 1,
-      'LINK': 0.001,
-      'DOT': 0.01
+  const validateAddress = (address: string, crypto: string, network: string) => {
+    // Basic address validation - implement proper validation for each crypto/network
+    const patterns: { [key: string]: { [key: string]: RegExp } } = {
+      BTC: {
+        bitcoin: /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$/,
+        lightning: /^ln[a-z0-9]+$/
+      },
+      ETH: {
+        ethereum: /^0x[a-fA-F0-9]{40}$/,
+        polygon: /^0x[a-fA-F0-9]{40}$/,
+        arbitrum: /^0x[a-fA-F0-9]{40}$/,
+        optimism: /^0x[a-fA-F0-9]{40}$/
+      },
+      ADA: {
+        cardano: /^addr1[a-z0-9]{98}$/
+      },
+      SOL: {
+        solana: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+      },
+      MATIC: {
+        polygon: /^0x[a-fA-F0-9]{40}$/,
+        ethereum: /^0x[a-fA-F0-9]{40}$/
+      },
+      BNB: {
+        bsc: /^0x[a-fA-F0-9]{40}$/,
+        ethereum: /^0x[a-fA-F0-9]{40}$/
+      },
+      XRP: {
+        xrp: /^r[1-9A-HJ-NP-Za-km-z]{25,34}$/
+      },
+      DOGE: {
+        dogecoin: /^D{1}[5-9A-HJ-NP-U]{1}[1-9A-HJ-NP-Za-km-z]{32}$/
+      },
+      LINK: {
+        ethereum: /^0x[a-fA-F0-9]{40}$/,
+        polygon: /^0x[a-fA-F0-9]{40}$/
+      },
+      DOT: {
+        polkadot: /^1[a-zA-Z0-9]{47}$/
+      },
+      USDT: {
+        ethereum: /^0x[a-fA-F0-9]{40}$/,
+        tron: /^T[A-Za-z1-9]{33}$/,
+        polygon: /^0x[a-fA-F0-9]{40}$/,
+        bsc: /^0x[a-fA-F0-9]{40}$/,
+        arbitrum: /^0x[a-fA-F0-9]{40}$/,
+        optimism: /^0x[a-fA-F0-9]{40}$/,
+        avalanche: /^0x[a-fA-F0-9]{40}$/
+      }
     }
-    return fees[symbol] || 0.001
+    
+    const cryptoPatterns = patterns[crypto]
+    if (!cryptoPatterns) return address.length > 20
+    
+    const pattern = cryptoPatterns[network]
+    return pattern ? pattern.test(address) : address.length > 20
   }
+
+  const isValidAddress = toAddress && selectedCrypto && selectedNetwork ? 
+    validateAddress(toAddress, selectedCrypto, selectedNetwork) : false
 
   return (
     <AnimatePresence>
@@ -130,7 +245,7 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
                   <Send className="w-5 h-5 text-purple-400" />
-                  Send Cryptocurrency
+                  Send to Cold Wallet
                 </CardTitle>
                 <Button variant="ghost" size="sm" onClick={handleClose}>
                   <X className="w-4 h-4" />
@@ -142,7 +257,7 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label className="text-slate-200">Select Cryptocurrency</Label>
-                        <Select value={selectedCrypto} onValueChange={setSelectedCrypto}>
+                        <Select value={selectedCrypto} onValueChange={handleCryptoChange}>
                           <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                             <SelectValue placeholder="Choose crypto to send" />
                           </SelectTrigger>
@@ -155,6 +270,38 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                           </SelectContent>
                         </Select>
                       </div>
+
+                      {selectedCrypto && availableNetworks.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-slate-200 flex items-center gap-2">
+                            <Network className="w-4 h-4" />
+                            Select Network
+                          </Label>
+                          <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
+                            <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                              <SelectValue placeholder="Choose network" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableNetworks.map((network) => (
+                                <SelectItem key={network.id} value={network.id}>
+                                  <div className="flex flex-col">
+                                    <span>{network.name}</span>
+                                    <span className="text-xs text-slate-400">
+                                      Fee: {network.fee} {selectedCrypto} • {network.confirmTime}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {selectedNetworkConfig && (
+                            <div className="text-xs text-slate-400 p-2 bg-slate-700/30 rounded">
+                              <strong>{selectedNetworkConfig.name}</strong> - Network fee: {selectedNetworkConfig.fee} {selectedCrypto} 
+                              • Confirmation time: {selectedNetworkConfig.confirmTime}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <Label className="text-slate-200">Amount</Label>
@@ -177,18 +324,27 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                       <div className="space-y-2">
                         <Label className="text-slate-200">Recipient Address</Label>
                         <Input
-                          placeholder={`Enter ${selectedCrypto || 'wallet'} address`}
+                          placeholder={`Enter ${selectedCrypto || 'wallet'} address for ${selectedNetworkConfig?.name || 'selected network'}`}
                           value={toAddress}
                           onChange={(e) => setToAddress(e.target.value)}
                           className="bg-slate-700 border-slate-600 text-white font-mono text-sm"
                         />
+                        {toAddress && selectedCrypto && selectedNetwork && (
+                          <div className={`text-xs ${isValidAddress ? 'text-green-400' : 'text-red-400'}`}>
+                            {isValidAddress ? '✓ Valid address format' : '✗ Invalid address format'}
+                          </div>
+                        )}
                       </div>
 
-                      {selectedCrypto && amount && (
+                      {selectedCrypto && amount && selectedNetworkConfig && (
                         <div className="p-4 bg-slate-700/30 rounded-lg space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-slate-400">Amount</span>
                             <span className="text-white">{amount} {selectedCrypto}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Network</span>
+                            <span className="text-white">{selectedNetworkConfig.name}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-slate-400">Network Fee</span>
@@ -196,11 +352,11 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                           </div>
                           <Separator className="bg-slate-600" />
                           <div className="flex justify-between font-semibold">
-                            <span className="text-white">Total</span>
+                            <span className="text-white">Total Deducted</span>
                             <span className="text-white">{totalAmount.toFixed(6)} {selectedCrypto}</span>
                           </div>
                           <div className="text-xs text-slate-400 mt-2">
-                            Estimated confirmation time: {getConfirmationTime(selectedCrypto)}
+                            Confirmation time: {selectedNetworkConfig.confirmTime}
                           </div>
                         </div>
                       )}
@@ -217,14 +373,15 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                       <Alert className="bg-yellow-900/20 border-yellow-700">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertDescription className="text-yellow-200">
-                          Double-check the recipient address. Cryptocurrency transactions cannot be reversed.
+                          <strong>Cold Wallet Transfer:</strong> Double-check the recipient address and network. 
+                          Transactions to cold wallets cannot be reversed.
                         </AlertDescription>
                       </Alert>
                     </div>
 
                     <Button
                       onClick={handleSend}
-                      disabled={!selectedCrypto || !amount || !toAddress || sending || (selectedHolding && totalAmount > selectedHolding.amount)}
+                      disabled={!selectedCrypto || !amount || !toAddress || !selectedNetwork || !isValidAddress || sending || (selectedHolding && totalAmount > selectedHolding.amount)}
                       className="w-full bg-purple-600 hover:bg-purple-700"
                     >
                       {sending ? (
@@ -236,7 +393,7 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                       ) : (
                         <>
                           <Send className="w-4 h-4 mr-2" />
-                          Send {selectedCrypto || 'Crypto'}
+                          Send to Cold Wallet
                         </>
                       )}
                     </Button>
@@ -253,13 +410,17 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
                     
                     <div>
                       <h3 className="text-lg font-semibold text-white mb-2">Transaction Submitted!</h3>
-                      <p className="text-slate-400">Your transaction has been broadcast to the network</p>
+                      <p className="text-slate-400">Your transaction has been broadcast to {txResult.networkName}</p>
                     </div>
 
                     <div className="p-4 bg-slate-700/30 rounded-lg space-y-2 text-left">
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">Amount</span>
                         <span className="text-white">{txResult.amount} {txResult.symbol}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Network</span>
+                        <span className="text-white">{txResult.networkName}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">Network Fee</span>
@@ -302,20 +463,4 @@ export function CryptoSendModal({ isOpen, onClose, holdings, prices, onSuccess }
       )}
     </AnimatePresence>
   )
-}
-
-function getConfirmationTime(symbol: string): string {
-  const times: { [key: string]: string } = {
-    'BTC': '10-60 minutes',
-    'ETH': '1-5 minutes',
-    'ADA': '2-5 minutes',
-    'SOL': '30 seconds',
-    'MATIC': '1-3 minutes',
-    'BNB': '3 seconds',
-    'XRP': '3-5 seconds',
-    'DOGE': '1 minute',
-    'LINK': '1-5 minutes',
-    'DOT': '6 seconds'
-  }
-  return times[symbol] || '1-5 minutes'
 }

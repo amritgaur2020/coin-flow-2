@@ -22,9 +22,10 @@ export function usePersistentHoldings() {
       } else {
         // Set default holdings only if no saved data exists
         const defaultHoldings = [
-          { symbol: 'BTC', name: 'Bitcoin', amount: 0.025, averagePrice: 42000 },
-          { symbol: 'ETH', name: 'Ethereum', amount: 1.5, averagePrice: 2500 },
-          { symbol: 'ADA', name: 'Cardano', amount: 1000, averagePrice: 0.48 }
+          { symbol: 'BTC', name: 'Bitcoin', amount: 0.025, averagePrice: 3500000 }, // ₹ 35,00,000
+          { symbol: 'ETH', name: 'Ethereum', amount: 1.5, averagePrice: 207500 }, // ₹ 2,07,500
+          { symbol: 'ADA', name: 'Cardano', amount: 1000, averagePrice: 43 }, // ₹ 43
+          { symbol: 'USDT', name: 'Tether USD', amount: 100, averagePrice: 83 } // ₹ 83
         ]
         setHoldings(defaultHoldings)
         localStorage.setItem('crypto-wallet-holdings', JSON.stringify(defaultHoldings))
@@ -34,9 +35,10 @@ export function usePersistentHoldings() {
       console.error('❌ Error loading holdings from localStorage:', error)
       // Fallback to default holdings
       const defaultHoldings = [
-        { symbol: 'BTC', name: 'Bitcoin', amount: 0.025, averagePrice: 42000 },
-        { symbol: 'ETH', name: 'Ethereum', amount: 1.5, averagePrice: 2500 },
-        { symbol: 'ADA', name: 'Cardano', amount: 1000, averagePrice: 0.48 }
+        { symbol: 'BTC', name: 'Bitcoin', amount: 0.025, averagePrice: 3500000 }, // ₹ 35,00,000
+        { symbol: 'ETH', name: 'Ethereum', amount: 1.5, averagePrice: 207500 }, // ₹ 2,07,500
+        { symbol: 'ADA', name: 'Cardano', amount: 1000, averagePrice: 43 }, // ₹ 43
+        { symbol: 'USDT', name: 'Tether USD', amount: 100, averagePrice: 83 } // ₹ 83
       ]
       setHoldings(defaultHoldings)
     } finally {

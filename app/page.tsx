@@ -46,18 +46,19 @@ const CRYPTO_INFO = {
   XRP: { name: 'XRP', icon: '✕' },
   DOGE: { name: 'Dogecoin', icon: 'Ð' },
   LINK: { name: 'Chainlink', icon: '🔗' },
-  DOT: { name: 'Polkadot', icon: '●' }
+  DOT: { name: 'Polkadot', icon: '●' },
+  USDT: { name: 'Tether USD', icon: '₮' }
 }
 
 export default function CryptoWalletApp() {
   const { prices, loading: pricesLoading, error: pricesError, lastUpdated, isUsingFallback, connectionStatus, refetch, reconnect } = useWebSocketPrices()
   const { holdings, updateHoldings, isLoaded: holdingsLoaded } = usePersistentHoldings()
   
-  const [fiatBalance, setFiatBalance] = useState(25000.00) // Changed to INR (₹25,000)
+  const [fiatBalance, setFiatBalance] = useState(25000.00) // ₹ 25,000
   const [transactions, setTransactions] = useState<Transaction[]>([
     { id: '1', type: 'deposit', amount: 10000, currency: 'INR', timestamp: new Date(Date.now() - 86400000), status: 'completed' },
     { id: '2', type: 'buy', amount: 0.025, currency: 'BTC', timestamp: new Date(Date.now() - 43200000), status: 'completed', price: 3500000 }, // ₹35,00,000
-    { id: '3', type: 'send', amount: 0.1, currency: 'ETH', timestamp: new Date(Date.now() - 21600000), status: 'completed', address: '0x742d35Cc6634C0532925a3b8D4C0532925a3b8D4', price: 207500 } // ₹2,07,500
+    { id: '3', type: 'send', amount: 0.1, currency: 'ETH', timestamp: new Date(Date.now() - 21600000), status: 'completed', address: '0x742d35Cc6634C0532925a3b8D4C0532925a3b8D4C0532925a3b8D4', price: 207500 } // ₹2,07,500
   ])
 
   const [buyAmount, setBuyAmount] = useState('')
@@ -324,7 +325,7 @@ export default function CryptoWalletApp() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  ₹<AnimatedNumber value={fiatBalance} decimals={0} />
+                  <AnimatedNumber value={fiatBalance} prefix="₹ " decimals={0} />
                 </div>
                 <p className="text-xs text-slate-400">Available for trading</p>
               </CardContent>
@@ -347,16 +348,17 @@ export default function CryptoWalletApp() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  ₹<AnimatedNumber 
+                  <AnimatedNumber 
                     value={totalPortfolioValue} 
+                    prefix="₹ "
                     decimals={0} 
                     showChange={true}
                   />
                 </div>
                 <p className={`text-xs ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ₹<AnimatedNumber 
+                  <AnimatedNumber 
                     value={Math.abs(totalPnL)} 
-                    prefix={totalPnL >= 0 ? '+' : '-'} 
+                    prefix={totalPnL >= 0 ? '+₹ ' : '-₹ '} 
                     decimals={0}
                   /> P&L
                 </p>
@@ -380,8 +382,9 @@ export default function CryptoWalletApp() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-white">
-                  ₹<AnimatedNumber 
+                  <AnimatedNumber 
                     value={totalBalance} 
+                    prefix="₹ "
                     decimals={0} 
                     showChange={true}
                   />
@@ -463,7 +466,7 @@ export default function CryptoWalletApp() {
                                 <div className="font-semibold text-white">{holding.name}</div>
                                 <div className="text-sm text-slate-400">{holding.symbol}</div>
                                 <div className="text-xs text-slate-500">
-                                  Avg: ₹{holding.averagePrice.toLocaleString()}
+                                  Avg: ₹ {holding.averagePrice.toLocaleString()}
                                 </div>
                               </div>
                             </div>
@@ -472,13 +475,13 @@ export default function CryptoWalletApp() {
                                 {holding.amount.toFixed(6)} {holding.symbol}
                               </div>
                               <div className="text-sm text-slate-400">
-                                ₹<AnimatedNumber value={currentValue} decimals={0} />
+                                <AnimatedNumber value={currentValue} prefix="₹ " decimals={0} />
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant={pnl >= 0 ? "default" : "destructive"} className="text-xs">
-                                  ₹<AnimatedNumber 
+                                  <AnimatedNumber 
                                     value={Math.abs(pnl)} 
-                                    prefix={pnl >= 0 ? '+' : '-'} 
+                                    prefix={pnl >= 0 ? '+₹ ' : '-₹ '} 
                                     decimals={0}
                                   /> ({pnlPercentage.toFixed(1)}%)
                                 </Badge>
@@ -556,7 +559,7 @@ export default function CryptoWalletApp() {
                             </div>
                             {tx.price && (
                               <div className="text-xs text-slate-400">
-                                @ ₹{tx.price.toLocaleString()}
+                                @ ₹ {tx.price.toLocaleString()}
                               </div>
                             )}
                             <Badge variant={tx.status === 'completed' ? 'default' : 'secondary'}>
@@ -656,7 +659,7 @@ export default function CryptoWalletApp() {
                           <SelectContent>
                             {Object.entries(prices).map(([symbol, data]) => (
                               <SelectItem key={symbol} value={symbol}>
-                                {CRYPTO_INFO[symbol as keyof typeof CRYPTO_INFO]?.name || symbol} ({symbol}) - ₹{(data.price * 83).toLocaleString()}
+                                {CRYPTO_INFO[symbol as keyof typeof CRYPTO_INFO]?.name || symbol} ({symbol}) - ₹ {(data.price * 83).toLocaleString()}
                               </SelectItem>
                             ))}
                           </SelectContent>

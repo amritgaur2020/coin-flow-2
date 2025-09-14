@@ -18,7 +18,8 @@ const FALLBACK_DATA = {
   XRP: { price: 0.63, change24h: -0.5, marketCap: 34000000000, volume: 1200000000 },
   DOGE: { price: 0.082, change24h: 3.2, marketCap: 12000000000, volume: 650000000 },
   LINK: { price: 14.5, change24h: 2.1, marketCap: 8500000000, volume: 420000000 },
-  DOT: { price: 7.2, change24h: -1.8, marketCap: 9200000000, volume: 380000000 }
+  DOT: { price: 7.2, change24h: -1.8, marketCap: 9200000000, volume: 380000000 },
+  USDT: { price: 1.0, change24h: 0.01, marketCap: 95000000000, volume: 45000000000 }
 }
 
 // Simulate more realistic price movements like Binance
@@ -73,7 +74,7 @@ export async function GET() {
 
     try {
       const response = await fetch(
-        `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,cardano,solana,polygon,binancecoin,ripple,dogecoin,chainlink,polkadot&vs_currencies=usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`,
+        `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,cardano,solana,polygon,binancecoin,ripple,dogecoin,chainlink,polkadot,tether&vs_currencies=usd&include_24hr_change=true&include_market_cap=true&include_24hr_vol=true`,
         {
           headers: {
             'Accept': 'application/json',
@@ -122,7 +123,8 @@ export async function GET() {
         XRP: 'ripple',
         DOGE: 'dogecoin',
         LINK: 'chainlink',
-        DOT: 'polkadot'
+        DOT: 'polkadot',
+        USDT: 'tether'
       }
 
       Object.entries(coinMappings).forEach(([symbol, coinId]) => {
